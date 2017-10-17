@@ -162,7 +162,7 @@ namespace Dapper.Contrib.Extensions
             // return keys.Count > 0 ? keys[0] : explicitKeys[0];
         }
 
-        private static PropertyInfo GetSingleKey(Type type,string method)
+        private static PropertyInfo GetSingleKey(Type type, string method)
         {
             var keys = KeyPropertiesCache(type);
             if (keys.Count > 0)
@@ -183,6 +183,98 @@ namespace Dapper.Contrib.Extensions
 
             // return keys.Count > 0 ? keys[0] : explicitKeys[0];
         }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <typeparam name="T">Interface or type to create and populate</typeparam>
+        /// <param name="connection">Open SqlConnection</param>
+        /// <param name="entity">Id of the entity to get, must be marked with [Key] attribute</param>
+        /// <param name="transaction">The transaction to run under, null (the default) if none</param>
+        /// <param name="commandTimeout">Number of seconds before command execution timeout</param>
+        /// <returns></returns>
+        public static long GetId<T>(this IDbConnection connection, T entity, IDbTransaction transaction = null, int? commandTimeout = null)
+        {
+            if (entity == null)
+            {
+                return 0;
+            }
+            var type = typeof(T);
+
+            if (!ContainQueries.TryGetValue(type.TypeHandle, out string sql))
+            {
+                var explicitKeyProperties = ExplicitKeyPropertiesCache(type);
+
+                if (type.IsArray)
+                {
+                    throw new DataException("GetId only support sigle data");
+                }
+                else if (type.IsGenericType())
+                {
+                    type = type.GetGenericArguments()[0];
+                }
+
+                var name = GetTableName(type);
+                var sbColumnList = new StringBuilder(null);
+                var allProperties = TypePropertiesCache(type);
+                var keyProperties = KeyPropertiesCache(type);
+                var computedProperties = ComputedPropertiesCache(type);
+                var allPropertiesExceptKeyAndComputed = allProperties.Except(keyProperties.Union(computedProperties)).ToList();
+
+
+                var adapter = GetFormatter(connection);
+                bool isExplicit = false;
+                if (explicitKeyProperties.Count > 0)
+                {
+                    isExplicit = true;
+                }
+                StringBuilder strExists = new StringBuilder();
+                strExists.AppendFormat("select {0} from {1} ", keyProperties[0].Name, name);
+                StringBuilder strWhere = new StringBuilder();
+                strWhere.Append(" where ");
+
+                if (isExplicit)
+                {
+                    for (int i = 0; i < explicitKeyProperties.Count; i++)
+                    {
+                        var property = explicitKeyProperties.ElementAt(i);
+                        adapter.AppendColumnNameEqualsValue(strWhere, property.Name);
+                        if (i < explicitKeyProperties.Count - 1)
+                        {
+                            strWhere.AppendFormat(" and ");
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < keyProperties.Count; i++)
+                    {
+                        var property = keyProperties.ElementAt(i);
+                        adapter.AppendColumnNameEqualsValue(strWhere, property.Name);
+                        if (i < keyProperties.Count - 1)
+                        {
+                            strWhere.AppendFormat(" and ");
+                        }
+                    }
+                }
+
+                strExists.Append(strWhere.ToString());
+                sql = strExists.ToString();
+                ContainQueries[type.TypeHandle] = sql;
+            }
+
+
+            object value = null;
+            value = connection.ExecuteScalar(sql, entity, commandTimeout: commandTimeout, transaction: transaction);
+            long id = 0;
+            if (value == null)
+            {
+                return id;
+            }
+            long.TryParse(value.ToString(), out id);
+            return id;
+        }
+
         /// <summary>
         /// 
         /// </summary>
@@ -361,7 +453,7 @@ namespace Dapper.Contrib.Extensions
             dynParms.Add("@id", id);
 
             dynamic obj;
-            obj = connection.QueryFirstOrDefault(sql, dynParms, transaction, commandTimeout: commandTimeout);            
+            obj = connection.QueryFirstOrDefault(sql, dynParms, transaction, commandTimeout: commandTimeout);
             return obj;
         }
 

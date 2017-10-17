@@ -15,11 +15,12 @@ namespace Dapper.NewTest
         static void Main(string[] args)
         {
             
-           var connection = GetMySqlConnection();
-            DynamicParameters param = new DynamicParameters();
-            param.Add("@BranchCode", "ydhead");
+            var connection = GetMySqlConnection();
+            //DynamicParameters param = new DynamicParameters();
+            //param.Add("@BranchCode", "ydhead");
             S_Branch br = new S_Branch();
             br.BranchCode = "ydsoft";
+            br.GroupCode = "yd";
             T_Base_User_Search br1 = new T_Base_User_Search();
             br1.RoleId = 1;
             br1.PrincipalId = 0;
@@ -28,7 +29,7 @@ namespace Dapper.NewTest
             br1.Asc = true;
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
-            var list1 = connection.Get(br.GetType(), 1);
+            var list1 = connection.GetId(br);
             stopwatch.Stop();
             Console.WriteLine(stopwatch.ElapsedMilliseconds);
 
